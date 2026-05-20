@@ -197,7 +197,10 @@ describe('mapAttributes — ai.* fallback', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]!.id).toBe('c1')
     expect(calls[0]!.name).toBe('get_weather')
-    expect(calls[0]!.arguments).toEqual({ city: 'Tokyo' })
+    // Args are always serialised to a JSON string — the Voight
+    // dashboard renders tool arguments with `.length` / `.slice`,
+    // so emitting raw objects would crash the trace detail view.
+    expect(calls[0]!.arguments).toBe('{"city":"Tokyo"}')
     expect(ev!.toolExecuted).toBe('get_weather')
   })
 })
@@ -452,7 +455,10 @@ describe('mapAttributes — privacy levels', () => {
     expect('responseText' in (ev!.metadata as object)).toBe(false)
     const calls = ev!.metadata!.toolCalls as Array<Record<string, unknown>>
     expect(calls[0]!.name).toBe('send_email')
-    expect(calls[0]!.arguments).toBeNull()
+    // minimal privacy keeps the tool name (it's a tag) and drops
+    // arguments by emitting an empty string — preserves the
+    // arguments-is-string contract for the dashboard.
+    expect(calls[0]!.arguments).toBe('')
   })
 })
 
@@ -509,5 +515,98 @@ describe('mapAttributes — always-present metadata', () => {
     expect(ev!.metadata!.source).toBe('vercel-ai-sdk')
     expect(ev!.metadata!.api).toBe('vercel-ai')
     expect(ev!.metadata!.privacyLevel).toBe('standard')
+  })
+})
+
+// ─── mapAttributes — tool arguments are always strings ─────────────
+
+describe('mapAttributes — tool arguments string normalisation', () => {
+  it('JSON-stringifies object args from Vercel ai.* tool calls', () => {
+    // Vercel AI SDK 6 emits parsed objects on `ai.response.toolCalls`
+    // while OTel GenAI semconv emits JSON strings. The Voight
+    // dashboard's trace detail renders args with `.length` / `.slice`
+    // so we must coerce to string regardless of source.
+    const ev = mapAttributes(
+      span({
+        attributes: {
+          ...AI_MIN_ATTRS,
+          'ai.response.toolCalls': JSON.stringify([
+            { toolCallId: 't1', toolName: 'lookup', args: { city: 'Tokyo', units: 'metric' } },
+          ]),
+        },
+      }),
+    )
+    const calls = ev!.metadata!.toolCalls as Array<Record<string, unknown>>
+    expect(typeof calls[0]!.arguments).toBe('string')
+    expect(calls[0]!.arguments).toBe('{"city":"Tokyo","units":"metric"}')
+  })
+
+  it('passes string args through unchanged (gen_ai semconv shape)', () => {
+    const ev = mapAttributes(
+      span({
+        attributes: {
+          ...GEN_AI_MIN_ATTRS,
+          'gen_ai.tool_calls': JSON.stringify([
+            { id: 'c1', name: 'lookup', arguments: '{"q":"raw"}' },
+          ]),
+        },
+      }),
+    )
+    const calls = ev!.metadata!.toolCalls as Array<Record<string, unknown>>
+    expect(calls[0]!.arguments).toBe('{"q":"raw"}')
+  })
+
+  it('emits empty string for missing args', () => {
+    const ev = mapAttributes(
+      span({
+        attributes: {
+          ...GEN_AI_MIN_ATTRS,
+          'gen_ai.tool_calls': JSON.stringify([
+            { id: 'c1', name: 'no_args' },
+          ]),
+        },
+      }),
+    )
+    const calls = ev!.metadata!.toolCalls as Array<Record<string, unknown>>
+    expect(calls[0]!.arguments).toBe('')
+  })
+})
+
+// ─── mapAttributes — ai.telemetry.metadata → tags ──────────────────
+
+describe('mapAttributes — telemetry metadata becomes Voight tags', () => {
+  it('lifts ai.telemetry.metadata.<key> attributes into metadata.tags', () => {
+    // The hook that activates per-user spend tracking. A dev that
+    // passes `experimental_telemetry: { metadata: { userId, plan } }`
+    // to streamText / generateText gets those keys surfaced under
+    // metadata.tags, which the Voight Users sub-tab indexes.
+    const ev = mapAttributes(
+      span({
+        attributes: {
+          ...GEN_AI_MIN_ATTRS,
+          'ai.telemetry.metadata.userId': 'user_alpha',
+          'ai.telemetry.metadata.plan': 'pro',
+          'ai.telemetry.metadata.org': 'acme',
+        },
+      }),
+    )
+    expect(ev!.metadata!.tags).toEqual({
+      userId: 'user_alpha',
+      plan: 'pro',
+      org: 'acme',
+    })
+  })
+
+  it('omits metadata.tags entirely when no telemetry metadata is set', () => {
+    const ev = mapAttributes(span({ attributes: GEN_AI_MIN_ATTRS }))
+    expect('tags' in (ev!.metadata as object)).toBe(false)
+  })
+
+  it('does not lift unrelated ai.* attributes', () => {
+    // Defensive: only the explicit telemetry.metadata prefix counts,
+    // not the broader ai.* namespace. Otherwise model.id / usage.*
+    // would leak into tags and the Users sub-tab would be polluted.
+    const ev = mapAttributes(span({ attributes: AI_MIN_ATTRS }))
+    expect('tags' in (ev!.metadata as object)).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 # @voightxyz/vercel-ai
 
-> **Beta.** First public release — feedback welcome on the [issues page](https://github.com/Voightxyz/voight-vercel-ai/issues).
+> **0.1.0.** First stable release, validated against `vercel/ai-chatbot`. Bug reports + feature requests welcome on the [issues page](https://github.com/Voightxyz/voight-vercel-ai/issues).
 
 Voight observability for the [Vercel AI SDK](https://sdk.vercel.ai). An OpenTelemetry `SpanExporter` that ingests the `experimental_telemetry` spans produced by `streamText` / `generateText` / `streamObject` / `generateObject` — prompts, tokens, tool calls, cache reads, latency, errors — surfaced live in the [Voight dashboard](https://voight.xyz).
 
@@ -128,7 +128,7 @@ Each exporter sees the same span batch independently.
 
 | Capability | Status |
 |---|---|
-| `streamText` / `generateText` capture | ✅ Verified (0.1.0-beta.1) |
+| `streamText` / `generateText` capture | ✅ Verified (0.1.0) |
 | `streamObject` / `generateObject` capture | ✅ Same code path (no extra config) |
 | OpenAI provider attribution | ✅ |
 | Anthropic provider attribution | ✅ |

@@ -255,17 +255,39 @@ function isOuterVercelWrapper(spanName: string): boolean {
 // ─── Tool calls normalisation ──────────────────────────────────────
 
 /**
+ * Coerce a tool-call arguments value to a JSON string, mirroring the
+ * shape the rest of the Voight ecosystem emits (`@voightxyz/openai`,
+ * `@voightxyz/anthropic`). Vercel AI SDK 6 emits `args` as a parsed
+ * object; OTel GenAI semconv allows either string or object; the
+ * Voight dashboard renders it with `.length` / `.slice` and expects
+ * a string. Anything that already is a string passes through
+ * untouched (including invalid JSON — we don't try to re-parse).
+ */
+function stringifyToolArguments(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return ''
+  try {
+    return JSON.stringify(value)
+  } catch {
+    // Circular structures or BigInts; bail to a stable placeholder
+    // rather than crashing the export pipeline.
+    return '[unserializable]'
+  }
+}
+
+/**
  * Normalise the tool-calls array to the Voight backend shape:
  * `{ id, name, arguments }`. Accepts either the OTel GenAI spec
  * shape `{ id, name, arguments }` directly, or the Vercel SDK shape
- * `{ toolCallId, toolName, args }`.
+ * `{ toolCallId, toolName, args }`. Arguments are always emitted as
+ * a JSON string for downstream compatibility.
  */
 function normaliseToolCalls(
   raw: unknown,
-): Array<{ id?: string; name: string; arguments: unknown }> | null {
+): Array<{ id?: string; name: string; arguments: string }> | null {
   const parsed = parseJsonLoose(raw)
   if (!Array.isArray(parsed)) return null
-  const out: Array<{ id?: string; name: string; arguments: unknown }> = []
+  const out: Array<{ id?: string; name: string; arguments: string }> = []
   for (const call of parsed) {
     if (call === null || typeof call !== 'object') continue
     const c = call as Record<string, unknown>
@@ -278,15 +300,15 @@ function normaliseToolCalls(
       stringOrNull(c.id) ??
       stringOrNull(c.toolCallId) ??
       undefined
-    const args =
+    const rawArgs =
       c.arguments !== undefined
         ? c.arguments
         : c.args !== undefined
           ? c.args
           : null
-    const entry: { id?: string; name: string; arguments: unknown } = {
+    const entry: { id?: string; name: string; arguments: string } = {
       name,
-      arguments: args,
+      arguments: stringifyToolArguments(rawArgs),
     }
     if (id !== undefined) entry.id = id
     out.push(entry)
@@ -313,24 +335,25 @@ function applyPrivacyText(text: string | null, level: PrivacyLevel): string | nu
 }
 
 function applyPrivacyToolCalls(
-  toolCalls: Array<{ id?: string; name: string; arguments: unknown }> | null,
+  toolCalls: Array<{ id?: string; name: string; arguments: string }> | null,
   level: PrivacyLevel,
-): Array<{ id?: string; name: string; arguments: unknown }> | null {
+): Array<{ id?: string; name: string; arguments: string }> | null {
   if (toolCalls === null) return null
   if (level === 'minimal') {
     // Names alone are tags — keep them so the dashboard can still
     // show "called search_docs" even at minimal privacy. Drop the
-    // arguments (user-data shaped).
+    // arguments (user-data shaped) by emitting an empty string so
+    // the downstream `.length` / `.slice` calls stay safe.
     return toolCalls.map(({ id, name }) =>
       id !== undefined
-        ? { id, name, arguments: null }
-        : { name, arguments: null },
+        ? { id, name, arguments: '' }
+        : { name, arguments: '' },
     )
   }
   if (level === 'full') return toolCalls
   return toolCalls.map((call) => ({
     ...call,
-    arguments: scrubAnyValue(call.arguments),
+    arguments: scrubPii(call.arguments),
   }))
 }
 
@@ -454,6 +477,23 @@ export function mapAttributes(
   if (toolCallsFiltered !== null) metadata.toolCalls = toolCallsFiltered
   if (finishReason !== null) metadata.finishReason = finishReason
   if (options.sessionId !== undefined) metadata.sessionId = options.sessionId
+
+  // ── User-supplied telemetry metadata → Voight tags ──────────────
+  // Vercel AI SDK lifts `experimental_telemetry.metadata.<key>=<value>`
+  // pairs onto the span as `ai.telemetry.metadata.<key>` attributes.
+  // We surface them under `metadata.tags.*` to match the per-user-spend
+  // contract that `@voightxyz/openai`'s `withTrace({ tags })` already
+  // emits — the Voight Users sub-tab + filter pills read this exact
+  // shape. Two effects: (1) `tags.userId` activates per-user spend
+  // tracking, (2) arbitrary tag.<key> filters work in the dashboard.
+  const tags: Record<string, unknown> = {}
+  const TAG_PREFIX = 'ai.telemetry.metadata.'
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith(TAG_PREFIX) && k.length > TAG_PREFIX.length) {
+      tags[k.slice(TAG_PREFIX.length)] = v
+    }
+  }
+  if (Object.keys(tags).length > 0) metadata.tags = tags
 
   const event: EventPayload = {
     type: 'reasoning',

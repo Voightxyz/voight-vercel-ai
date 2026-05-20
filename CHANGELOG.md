@@ -5,10 +5,13 @@ All notable changes to `@voightxyz/vercel-ai` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0-beta.1] — 2026-05-20
+## [0.1.0] — 2026-05-21
 
-First public release. Ships as `@beta` on npm — promotion to `@latest`
-follows a Stage 2 soak with [`vercel/ai-chatbot`](https://github.com/vercel/ai-chatbot).
+First stable release. Validated end-to-end against the
+[`vercel/ai-chatbot`](https://github.com/vercel/ai-chatbot) reference
+app: multi-turn streaming, tool calls (`getWeather`,
+`createDocument`, …), per-user attribution via guest sessions, and
+full trace grouping all land cleanly in the Voight dashboard.
 
 ### Added
 
@@ -23,9 +26,17 @@ follows a Stage 2 soak with [`vercel/ai-chatbot`](https://github.com/vercel/ai-c
 - Captured fields: `model`, `metadata.provider`,
   `metadata.providerSurface`, `metadata.responseModel`, prompt
   messages, response text, tool calls (normalised across OTel
-  GenAI + Vercel shapes), token counts (input / output /
-  cache_read / cache_creation), finish reason, streaming flag,
-  duration, sessionId, outcome, error message.
+  GenAI + Vercel shapes, always emitted as JSON strings), token
+  counts (input / output / cache_read / cache_creation), finish
+  reason, streaming flag, duration, sessionId, outcome, error
+  message.
+- Per-user attribution via `experimental_telemetry.metadata`. The
+  exporter lifts every `ai.telemetry.metadata.<key>` span attribute
+  into `metadata.tags.<key>`, matching the contract that
+  `@voightxyz/openai`'s `withTrace({ tags })` already emits.
+  Passing `{ metadata: { userId, plan, … } }` to `streamText` /
+  `generateText` activates the Voight Users sub-tab and the
+  per-tag filter pills.
 - Three privacy levels (`'minimal'` / `'standard'` / `'full'`)
   sharing the 12-pattern PII catalogue used by
   `@voightxyz/openai` and `@voightxyz/anthropic`.
@@ -38,6 +49,11 @@ follows a Stage 2 soak with [`vercel/ai-chatbot`](https://github.com/vercel/ai-c
 - `metadata.source = 'vercel-ai-sdk'` constant on every event so
   the dashboard provider filter can distinguish Vercel AI events
   from those emitted by the direct wrappers.
+- Vercel AI SDK outer wrappers (`ai.streamText`, `ai.generateText`,
+  `ai.streamObject`, `ai.generateObject`) are skipped at the
+  mapper layer so each LLM call lands as a single event with
+  complete token counts, not as duplicate events with `0/0`
+  tokens.
 
 ### Out of scope (deferred)
 
@@ -47,10 +63,10 @@ follows a Stage 2 soak with [`vercel/ai-chatbot`](https://github.com/vercel/ai-c
   propagation already provides equivalent semantics; the helpers
   may return in `0.2` if real usage shows a gap.
 - Batched / buffered ingest — the per-event POST is sufficient
-  for the workloads we expect at beta volume. Batching arrives
+  for the workloads we expect at this scale. Batching arrives
   with real-world failure-mode data to design against.
 - Bedrock / Vertex provider-specific paths — the `gen_ai.*`
-  normalisation is expected to cover them; will revisit if a
-  user reports a missing attribute.
+  normalisation is expected to cover them; will revisit if a user
+  reports a missing attribute.
 
-[0.1.0-beta.1]: https://github.com/Voightxyz/voight-vercel-ai/releases/tag/v0.1.0-beta.1
+[0.1.0]: https://github.com/Voightxyz/voight-vercel-ai/releases/tag/v0.1.0
