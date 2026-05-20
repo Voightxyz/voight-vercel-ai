@@ -1,0 +1,80 @@
+{
+  "name": "@voightxyz/vercel-ai",
+  "version": "0.1.0-beta.1",
+  "description": "Voight observability for the Vercel AI SDK. OpenTelemetry SpanExporter that ingests `experimental_telemetry` spans from `streamText`/`generateText`/etc. into your Voight dashboard — prompts, tokens, tool calls, cache, latency, errors, all providers normalised.",
+  "keywords": [
+    "vercel-ai",
+    "vercel-ai-sdk",
+    "ai-sdk",
+    "opentelemetry",
+    "otel",
+    "observability",
+    "ai-agents",
+    "voight",
+    "llm",
+    "monitoring",
+    "instrumentation",
+    "gen-ai",
+    "span-exporter"
+  ],
+  "homepage": "https://voight.xyz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voightxyz/voight-vercel-ai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/voightxyz/voight-vercel-ai/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Voight (https://voight.xyz)",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.4.0",
+    "@opentelemetry/sdk-trace-base": ">=1.0.0",
+    "ai": ">=6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@types/node": "^25.6.0",
+    "ai": "^6.0.185",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  }
+}
