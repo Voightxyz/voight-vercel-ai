@@ -308,6 +308,66 @@ describe('mapAttributes — streaming detection', () => {
   })
 })
 
+// ─── mapAttributes — Vercel outer-wrapper filter ───────────────────
+
+describe('mapAttributes — Vercel outer-wrapper filter', () => {
+  it("returns null for the 'ai.generateText' outer wrapper", () => {
+    expect(
+      mapAttributes(
+        span({ name: 'ai.generateText', attributes: GEN_AI_MIN_ATTRS }),
+      ),
+    ).toBeNull()
+  })
+
+  it("returns null for the 'ai.streamText' outer wrapper", () => {
+    expect(
+      mapAttributes(
+        span({ name: 'ai.streamText', attributes: GEN_AI_MIN_ATTRS }),
+      ),
+    ).toBeNull()
+  })
+
+  it("returns null for the 'ai.generateObject' outer wrapper", () => {
+    expect(
+      mapAttributes(
+        span({ name: 'ai.generateObject', attributes: GEN_AI_MIN_ATTRS }),
+      ),
+    ).toBeNull()
+  })
+
+  it('keeps inner Vercel spans (.doGenerate / .doStream)', () => {
+    expect(
+      mapAttributes(
+        span({
+          name: 'ai.generateText.doGenerate',
+          attributes: GEN_AI_MIN_ATTRS,
+        }),
+      ),
+    ).not.toBeNull()
+    expect(
+      mapAttributes(
+        span({
+          name: 'ai.streamText.doStream',
+          attributes: GEN_AI_MIN_ATTRS,
+        }),
+      ),
+    ).not.toBeNull()
+  })
+
+  it('keeps non-Vercel spans whose names do not start with ai.', () => {
+    // A LangChain or LiteLLM auto-instrumentation span using
+    // `gen_ai.*` semconv directly. No `ai.` prefix → no skip.
+    expect(
+      mapAttributes(
+        span({
+          name: 'gen_ai.client.request',
+          attributes: GEN_AI_MIN_ATTRS,
+        }),
+      ),
+    ).not.toBeNull()
+  })
+})
+
 // ─── mapAttributes — outcome / status ──────────────────────────────
 
 describe('mapAttributes — outcome + status', () => {

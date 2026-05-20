@@ -205,7 +205,12 @@ export function hrTimeDeltaMs(start: HrTime, end: HrTime): number {
     return 0
   }
   const ms = (es - ss) * 1000 + (en - sn) / 1_000_000
-  return Number.isFinite(ms) && ms >= 0 ? ms : 0
+  // The Voight backend Zod schema requires `durationMs` to be a
+  // non-negative integer; OTel HrTime arithmetic naturally produces
+  // a float (e.g. 1234.567ms). Round to the nearest millisecond —
+  // sub-ms precision is well below the noise floor of any real
+  // network-bound LLM call so we lose nothing meaningful.
+  return Number.isFinite(ms) && ms >= 0 ? Math.round(ms) : 0
 }
 
 // ─── Streaming detection ───────────────────────────────────────────
@@ -218,6 +223,33 @@ export function hrTimeDeltaMs(start: HrTime, end: HrTime): number {
  */
 function isStreaming(spanName: string): boolean {
   return spanName.includes('stream')
+}
+
+// ─── Outer-wrapper detection ───────────────────────────────────────
+
+/**
+ * Vercel AI SDK emits two spans per LLM call: an outer wrapper
+ * (`ai.generateText` / `ai.streamText` / `ai.generateObject` /
+ * `ai.streamObject`) and an inner provider span (`*.doGenerate` /
+ * `*.doStream`). The outer wrapper carries duplicated copies of
+ * some attributes (model, prompt, finish reason) but **not** the
+ * token counts — those live exclusively on the inner span. If we
+ * emit both, the dashboard ends up with two events per call, one
+ * of which has `tokens: 0/0` and looks broken.
+ *
+ * We skip the outer wrapper by name pattern: any span whose name
+ * starts with `ai.` and does *not* contain a `.do` segment is an
+ * outer wrapper. Non-Vercel sources (LangChain / LiteLLM auto-
+ * instrumentation using `gen_ai.*` directly) don't match this
+ * prefix and pass through unchanged.
+ *
+ * - `ai.generateText`           → outer (skip)
+ * - `ai.generateText.doGenerate` → inner (keep)
+ * - `gen_ai.client.request`     → non-Vercel, no `ai.` prefix (keep)
+ */
+function isOuterVercelWrapper(spanName: string): boolean {
+  if (!spanName.startsWith('ai.')) return false
+  return !spanName.includes('.do')
 }
 
 // ─── Tool calls normalisation ──────────────────────────────────────
@@ -315,6 +347,11 @@ export function mapAttributes(
 ): EventPayload | null {
   const attrs = span.attributes
   const privacy: PrivacyLevel = options.privacy ?? 'standard'
+
+  // ── Filter: drop Vercel outer wrappers ───────────────────────────
+  // See `isOuterVercelWrapper`: keeping these would duplicate every
+  // call in the dashboard with a broken sibling event missing tokens.
+  if (isOuterVercelWrapper(span.name)) return null
 
   // ── Detect: is this an LLM span at all? ──────────────────────────
   // Cheap pre-check: at least one of the two canonical model-id keys
