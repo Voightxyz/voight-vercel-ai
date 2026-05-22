@@ -5,6 +5,13 @@ All notable changes to `@voightxyz/vercel-ai` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-05-22
+
+Promoted from `0.1.1-beta.1` after a clean smoke cycle from the
+beta registry — same shipping content, dropped the `-beta.1`
+suffix and removed `publishConfig.tag` so `npm publish` defaults
+to `@latest`. No code changes between beta and stable.
+
 ## [0.1.1-beta.1] — 2026-05-22
 
 Dedup filter for wrapper-emitted spans. When `@voightxyz/openai` or
