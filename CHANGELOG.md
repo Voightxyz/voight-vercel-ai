@@ -5,6 +5,31 @@ All notable changes to `@voightxyz/vercel-ai` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1-beta.1] — 2026-05-22
+
+Dedup filter for wrapper-emitted spans. When `@voightxyz/openai` or
+`@voightxyz/anthropic` is wrapped with `otel: true`, every captured
+call goes out via two paths: the wrapper's own direct POST to
+`api.voight.xyz`, plus an OpenTelemetry span destined for whichever
+exporters the host process has registered. If `VoightExporter` is
+one of those exporters (the common case for users adopting both
+products), the same call would land twice in the Voight backend —
+once via the wrapper and once via the exporter.
+
+This release teaches `VoightExporter.export()` to recognise the
+`voight.source: 'wrapper'` attribute the wrappers stamp on those
+spans, and skip those spans cleanly (no POST, no error, callback
+still SUCCESS). Other OTel exporters in the same process still
+see the spans and forward them normally — the dedup is scoped to
+the Voight-to-Voight loop.
+
+Spans without that attribute (the canonical `streamText` /
+`generateText` / `streamObject` / `generateObject` spans the Vercel
+AI SDK emits) are unaffected and continue to flow.
+
+Out as `@beta` for one cycle of registry validation before the
+@latest promotion.
+
 ## [0.1.0] — 2026-05-21
 
 First stable release. Validated end-to-end against the

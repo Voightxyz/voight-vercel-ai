@@ -152,6 +152,19 @@ export class VoightExporter {
       }
 
       for (const span of spans) {
+        // Dedup filter for spans that originated from a Voight
+        // wrapper (`@voightxyz/openai` or `@voightxyz/anthropic`
+        // with `otel: true`). Those wrappers already POSTed the
+        // event directly to /v1/events at capture time, so
+        // forwarding the span here would land a duplicate.
+        //
+        // Other OTel exporters in the same process don't run this
+        // filter and process the span normally — by design. They
+        // need the full span to ship to Langfuse / Datadog / etc.,
+        // and they don't carry our dedup obligation.
+        const attrs = (span as SpanLike).attributes ?? {}
+        if (attrs['voight.source'] === 'wrapper') continue
+
         // mapAttributes returns null for non-LLM spans (HTTP clients,
         // DB queries, framework spans). We silently skip them — the
         // OTel runtime may have other exporters that want them.

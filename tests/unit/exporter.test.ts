@@ -278,6 +278,108 @@ describe('VoightExporter — result callback', () => {
   })
 })
 
+describe('VoightExporter — dedup with wrapper-emitted spans', () => {
+  // These tests guard the contract between this exporter and the
+  // `@voightxyz/openai` + `@voightxyz/anthropic` wrappers running
+  // with `otel: true`. Those wrappers stamp
+  // `voight.source: 'wrapper'` on every span they emit (in
+  // addition to POSTing the same event directly to /v1/events).
+  // The exporter MUST skip those spans, otherwise the dashboard
+  // sees every wrapper call twice.
+
+  function wrapperSpan(
+    overrides: Partial<ReadableSpanLike> = {},
+  ): ReadableSpanLike {
+    return llmSpan({
+      name: 'voight.openai.chat',
+      attributes: {
+        'gen_ai.system': 'openai',
+        'gen_ai.request.model': 'gpt-4o-mini',
+        'gen_ai.usage.input_tokens': 120,
+        'gen_ai.usage.output_tokens': 47,
+        'voight.source': 'wrapper',
+        'voight.package': '@voightxyz/openai',
+      },
+      ...overrides,
+    })
+  }
+
+  it("drops spans tagged with voight.source='wrapper'", async () => {
+    const { spy, fetch } = okFetch()
+    const exporter = new VoightExporter({
+      agent: 'demo-app',
+      voightApiKey: 'vk_test_abc',
+      fetch,
+    })
+    exporter.export([wrapperSpan()], vi.fn())
+    await new Promise((r) => setImmediate(r))
+    // The wrapper already POSTed this event directly; the exporter
+    // must not POST it again.
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('still POSTs spans that lack the wrapper marker (Vercel AI SDK path stays intact)', async () => {
+    const { spy, fetch } = okFetch()
+    const exporter = new VoightExporter({
+      agent: 'demo-app',
+      voightApiKey: 'vk_test_abc',
+      fetch,
+    })
+    // A regular Vercel AI SDK span — no voight.source attribute.
+    // Must be POSTed normally; the dedup only kicks in when the
+    // marker is explicitly present.
+    exporter.export([llmSpan()], vi.fn())
+    await new Promise((r) => setImmediate(r))
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('only dedups the wrapper marker — other voight.source values pass through', async () => {
+    const { spy, fetch } = okFetch()
+    const exporter = new VoightExporter({
+      agent: 'demo-app',
+      voightApiKey: 'vk_test_abc',
+      fetch,
+    })
+    // Hypothetical future source — must NOT be filtered. The dedup
+    // is exact-string match against 'wrapper'; only the two
+    // direct-wrapper packages set that exact value.
+    exporter.export(
+      [
+        llmSpan({
+          attributes: {
+            'gen_ai.system': 'openai',
+            'gen_ai.request.model': 'gpt-4o-mini',
+            'gen_ai.usage.input_tokens': 1,
+            'gen_ai.usage.output_tokens': 1,
+            'voight.source': 'something-else',
+          },
+        }),
+      ],
+      vi.fn(),
+    )
+    await new Promise((r) => setImmediate(r))
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('correctly partitions a mixed batch — wrapper spans dropped, Vercel spans POSTed', async () => {
+    const { spy, fetch } = okFetch()
+    const exporter = new VoightExporter({
+      agent: 'demo-app',
+      voightApiKey: 'vk_test_abc',
+      fetch,
+    })
+    // Realistic batch: 2 wrapper spans + 2 Vercel AI spans
+    // interleaved. Expect 2 POSTs (the Vercel ones), wrapper ones
+    // skipped.
+    exporter.export(
+      [wrapperSpan(), llmSpan(), wrapperSpan(), llmSpan()],
+      vi.fn(),
+    )
+    await new Promise((r) => setImmediate(r))
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('VoightExporter — lifecycle', () => {
   it('shutdown() resolves immediately', async () => {
     const exporter = new VoightExporter({ agent: 'x', voightApiKey: 'vk_test' })
