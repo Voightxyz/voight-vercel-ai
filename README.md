@@ -1,6 +1,6 @@
 # @voightxyz/vercel-ai
 
-> **0.1.0.** First stable release, validated against `vercel/ai-chatbot`. Bug reports + feature requests welcome on the [issues page](https://github.com/Voightxyz/voight-vercel-ai/issues).
+> **0.1.1.** Stable + dedup filter for wrapper-emitted spans. Bug reports + feature requests welcome on the [issues page](https://github.com/Voightxyz/voight-vercel-ai/issues).
 
 Voight observability for the [Vercel AI SDK](https://sdk.vercel.ai). An OpenTelemetry `SpanExporter` that ingests the `experimental_telemetry` spans produced by `streamText` / `generateText` / `streamObject` / `generateObject` — prompts, tokens, tool calls, cache reads, latency, errors — surfaced live in the [Voight dashboard](https://voight.xyz).
 
@@ -124,6 +124,14 @@ registerOTel({
 
 Each exporter sees the same span batch independently.
 
+## Pairing with Voight direct wrappers
+
+If your app also uses [`@voightxyz/openai`](https://www.npmjs.com/package/@voightxyz/openai) or [`@voightxyz/anthropic`](https://www.npmjs.com/package/@voightxyz/anthropic) with `otel: true`, both packages will emit OpenTelemetry spans for every LLM call. Since `VoightExporter` is registered as an OTel exporter, those wrapper-emitted spans would normally hit the Voight backend twice (once via the wrapper's own direct POST, once via the exporter).
+
+Starting in `0.1.1`, the exporter recognises the `voight.source: 'wrapper'` attribute the wrappers stamp on those spans and skips them cleanly — no POST, callback still SUCCESS. Other OTel exporters in the same process (Langfuse, Datadog, Sentry) still see the spans and forward them normally. The dedup is scoped to the Voight-to-Voight loop.
+
+Spans without that marker — the canonical `streamText` / `generateText` / `streamObject` / `generateObject` spans the Vercel AI SDK emits — are unaffected.
+
 ## Status
 
 | Capability | Status |
@@ -135,6 +143,7 @@ Each exporter sees the same span batch independently.
 | Tool calls (OpenAI + Anthropic) | ✅ |
 | Cache tokens (OpenAI cached_input, Anthropic cache_read + cache_creation) | ✅ |
 | Privacy fan-out (3 levels) | ✅ |
+| Dedup with `@voightxyz/openai` + `@voightxyz/anthropic` `otel: true` | ✅ 0.1.1 — skips wrapper-emitted spans (`voight.source: 'wrapper'`) |
 | Per-request `withTrace` / `log` helpers | Deferred — OTel context already provides equivalent semantics; the helpers may return in 0.2 if real usage shows a gap. |
 | Direct middleware (`voightMiddleware()`) | Deferred — planned for 0.2 for users who want a 1-line wrap without OTel setup. |
 
