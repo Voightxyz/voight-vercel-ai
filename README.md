@@ -159,3 +159,7 @@ Spans without that marker — the canonical `streamText` / `generateText` / `str
 ## License
 
 Apache 2.0. See [LICENSE](./LICENSE).
+
+---
+
+Voight is the observability and debugging infrastructure for autonomous systems, built by Galaxyhub Labs Inc. Company, team and traction: https://voight.xyz/company

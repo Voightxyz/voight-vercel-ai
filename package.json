@@ -1,7 +1,7 @@
 {
   "name": "@voightxyz/vercel-ai",
   "version": "0.1.1",
-  "description": "Voight observability for the Vercel AI SDK. OpenTelemetry SpanExporter that ingests `experimental_telemetry` spans from `streamText`/`generateText`/etc. into your Voight dashboard — prompts, tokens, tool calls, cache, latency, errors, all providers normalised.",
+  "description": "Drop-in observability for the Vercel AI SDK: an OpenTelemetry SpanExporter that ingests experimental_telemetry spans from streamText, generateText and friends into your Voight dashboard.",
   "keywords": [
     "vercel-ai",
     "vercel-ai-sdk",
