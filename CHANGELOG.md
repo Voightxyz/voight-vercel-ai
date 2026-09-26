@@ -5,6 +5,12 @@ All notable changes to `@voightxyz/vercel-ai` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] (2026-09-26)
+
+Metadata only, no code changes. The package description now says
+plainly what the package does, and the README ends with a link to
+the company page (voight.xyz/company).
+
 ## [0.1.1] — 2026-05-22
 
 Promoted from `0.1.1-beta.1` after a clean smoke cycle from the
