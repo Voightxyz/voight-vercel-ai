@@ -1,6 +1,6 @@
 {
   "name": "@voightxyz/vercel-ai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Drop-in observability for the Vercel AI SDK: an OpenTelemetry SpanExporter that ingests experimental_telemetry spans from streamText, generateText and friends into your Voight dashboard.",
   "keywords": [
     "vercel-ai",
